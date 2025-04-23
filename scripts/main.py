@@ -109,7 +109,12 @@ def printIMageToconsole(image: Image, colors, mode: str = "rgb"):
 
 if __name__ == '__main__':
     terminalSize = shutil.get_terminal_size()
-    imgPath: os.path = "C:/Users/Simon/Downloads/1000093779.jpg"
+    # Select a random image from the "images" directory
+    images_dir = os.path.join(os.path.dirname(__file__), "../images")
+    try:
+        imgPath = os.path.join(images_dir, random.choice(os.listdir(images_dir)))
+    except:
+        print("\033[31mNo Image in folder\033[0;0m")
     image = resizeImage(Image.open(imgPath), terminalSize.columns, terminalSize.lines-4)
 
     # Load colors from colors.json

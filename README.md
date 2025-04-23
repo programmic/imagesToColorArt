@@ -27,3 +27,8 @@ This project transforms images into ASCII-style art using terminal colors. It ma
 5. Install the required dependencies:
    ```bash
    pip install -r requirements.txt
+6. Create a new file called `images`
+7. Place images you wish to draw in the `images` folder
+8. Run the script:
+   - On Windows `python scripts/main.py`
+   - On macOS/Linux `python scripts/main.py`
