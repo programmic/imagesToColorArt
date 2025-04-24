@@ -10,7 +10,7 @@ def resizeImage(image: Image, max_width, max_height):
     aspect_ratio = original_height / original_width
 
     # Korrigierter Faktor, da Terminal-Zeichen meist höher als breit sind
-    terminal_aspect_ratio = 0.3  # Je nach Font evtl. anpassen
+    terminal_aspect_ratio = 0.42  # Je nach Font evtl. anpassen
 
     new_width = min(max_width, original_width)
     new_height = int(new_width * aspect_ratio * terminal_aspect_ratio)
@@ -80,12 +80,12 @@ def givePixelByPixelBrightness(pixel) -> str:
     # Gradient string for brightness levels
     gradient = "@%#*+=-:. "
     gradient = "█▓▒@\$%&#ØØ¤¤◎oø*=+–•~¨°^`˝’’‘`·˙∘⠁⠀"
+    gradient = "`.-':_,^=;><+!rc*/z?sLTv)J7(|FiCfI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@"
 
-    # Reverse the gradient if the brightness is below the blackThreshold
-    if level < blackThreshold:
-        max_brightness = blackThreshold
+    #if level < blackThreshold:
+    #    max_brightness = blackThreshold
     
-    gradient = gradient[::-1]
+    #gradient = gradient[::-1]
     # Calculate percentage and clamp it to [0, 1]
     percentage = max(0, min(level / max_brightness, 1))
     
@@ -94,7 +94,7 @@ def givePixelByPixelBrightness(pixel) -> str:
     
     return gradient[index]
 
-def printIMageToconsole(image: Image, colors, mode: str = "rgb"):
+def printIMageToconsole(image: Image, colors, mode: str = "rgb", watermark:str = "@programmic"):
     print("\033c")
     newimage: Image = transformImage(colorsRGB)
     for y in range(image.height):
@@ -102,7 +102,15 @@ def printIMageToconsole(image: Image, colors, mode: str = "rgb"):
             for i in colors["colors"]:
                 if newimage.getpixel((x, y)) == tuple(i["rgb"]):
                     code = i["code"]
-            print(f"{code}{givePixelByPixelBrightness(image.getpixel((x, y)))}", end="")
+            if watermark != "":
+                if (y == image.height -1 ) and (x >= image.width - len(watermark)):
+                    print(watermark)
+                    return
+                else:
+                    print(f"{code}{givePixelByPixelBrightness(image.getpixel((x, y)))}", end="")
+            else:
+                print(f"{code}{givePixelByPixelBrightness(image.getpixel((x, y)))}", end="")
+                
         print("\033[0m")  # Reset color after each line
     return
 
@@ -126,3 +134,4 @@ if __name__ == '__main__':
     colorsRGB = colorsToRGBList(colors)
     
     printIMageToconsole(image, colors)
+
