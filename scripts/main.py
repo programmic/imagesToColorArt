@@ -1,9 +1,10 @@
-from PIL import Image
+from PIL import Image, ImageFilter
 import random
 import os
 import json
 from tqdm import tqdm
 import shutil
+from PIL import ImageEnhance
 
 def resizeImage(image: Image, max_width, max_height):
     original_width, original_height = image.size
@@ -79,7 +80,7 @@ def givePixelByPixelBrightness(pixel) -> str:
     
     # Gradient string for brightness levels
     gradient = "@%#*+=-:. "
-    gradient = "█▓▒@\$%&#ØØ¤¤◎oø*=+–•~¨°^`˝’’‘`·˙∘⠁⠀"
+    gradient = "█▓▒@$%&#ØØ¤¤◎oø*=+–•~¨°^`˝’’‘`·˙∘⠁⠀"
     #gradient = "@&%QWNM0gB#$DR8mHXKAUbGOpV4d9h6PkqwS2]ayjxY5Zoen[ul t13IfcFi|)7JvTLs?z/*cr!+><;=^,_:*'-.`"
     gradient = "█▓▒▒▒▒ "
 
@@ -94,6 +95,27 @@ def givePixelByPixelBrightness(pixel) -> str:
     index = int(percentage * (len(gradient) - 1))
     
     return gradient[index]
+
+
+def downsampleGrayscale(pImage: Image, levels: int = 1):
+    levels: int = 3
+    width = pImage.width // levels
+    height = pImage.height // levels
+
+    dsImage = Image.new("L", (width, height))
+    for x in range(width):
+        for y in range(height):
+            pixel_sum = 0
+            samples = 0
+            for ix in range(levels):
+                for iy in range(levels):
+                    ox = x * levels + ix
+                    oy = y * levels + iy
+                    pixel_sum += pImage.getpixel((ox, oy))
+                    samples += 1
+            avg = int(pixel_sum / samples)
+            dsImage.putpixel((x, y), avg)
+    return dsImage
 
 def printIMageToconsole(image: Image, colors, mode: str = "rgb", watermark:str = "@programmic"):
     def printoutline():print(f"{code}{givePixelByPixelBrightness(image.getpixel((x, y)))}", end="", flush=False)
@@ -126,7 +148,7 @@ if __name__ == '__main__':
         imgPath = os.path.join(images_dir, random.choice(os.listdir(images_dir)))
     except:
         print("\033[31mNo Image in folder\033[0;0m")
-    image = resizeImage(Image.open(imgPath), terminalSize.columns, terminalSize.lines-4)
+    image = Image.open(imgPath)
 
     # Load colors from colors.json
     with open('colors.json', 'r') as file:
@@ -135,6 +157,15 @@ if __name__ == '__main__':
             color["code"] = color["code"].encode().decode("unicode_escape")
     #checkRandomPixel()
     colorsRGB = colorsToRGBList(colors)
-    
+    grayscaleImage = image.convert("L")
+    image = resizeImage(image, terminalSize.columns, terminalSize.lines-4)
     printIMageToconsole(image, colors)
 
+    
+
+    edgeDetect = grayscaleImage.filter(ImageFilter.FIND_EDGES)
+    enhancer = ImageEnhance.Contrast(edgeDetect)
+    edgeDetect = enhancer.enhance(1.5)
+    downsampleGrayscale(edgeDetect, 5).show()
+
+        
