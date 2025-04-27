@@ -1,6 +1,19 @@
 from PIL import Image, ImageFilter, ImageEnhance
-import os, math, random, json, shutil, colorsys
+import os, math, random, json, shutil, colorsys, time
+import helpful_functions as hf
 from tqdm import tqdm
+
+def timing(func):
+    """
+    A decorator to measure the execution time of a function.
+    """
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        print(f"Function '{func.__name__}' executed in {end_time - start_time:.4f} seconds.")
+        return result
+    return wrapper
 
 def resizeImage(image: Image.Image, max_width, max_height):
     original_width, original_height = image.size
@@ -30,13 +43,13 @@ def findClosestColor(color, colors) -> tuple[str]:
             closest_color = c
     return closest_color
 
+@timing
 def colorsToRGBList(colorsJSON):
     c: list = []
     for i in colorsJSON["colors"]:
         t= (i["rgb"][0], i["rgb"][1], i["rgb"][2])
         c.append(t)
     return c
-
 
 def calculateLuminance(pixel: tuple[int, int, int]) -> float:
     """
@@ -50,16 +63,6 @@ def calculateLuminance(pixel: tuple[int, int, int]) -> float:
     """
     r, g, b = pixel
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
-
-def transformImage(pImage, colorsRGB):
-    print(type(colorsRGB))
-    print(colorsRGB)
-    newImage = Image.new("RGB", (pImage.width, pImage.height))
-    for y in tqdm(range(pImage.height), desc="Transforming", ascii=True):
-        for x in range(pImage.width):
-            closest_color = findClosestColor(pImage.getpixel((x, y)), colorsRGB)
-            newImage.putpixel((x, y), closest_color)
-    return newImage
 
 def sumColorDifference(c1: tuple | list, c2: tuple | list) -> int:
     return abs( calculateLuminance(c1) - calculateLuminance(c2) )
@@ -79,31 +82,32 @@ def posterizeImage(pImage: Image.Image, colors:dict, mode: str = "rgb") -> Image
                     closestColorDifference = tmpSum
             newImage.putpixel((x,y), tuple(closestColor[mode]))
     return newImage
-            
 
-
-def giveCharacterByPixelBrightness(pixel) -> str:
+def giveCharacterByPixelBrightness(pixel, pGradient, gradientFilter: str="") -> str:
     max_brightness = 225*3   # Maximum possible brightness
     blackThreshold = 85 * 3  # Threshold for reversing the gradient
     level = sum(pixel) / 3  # Average of RGB values for normalization
     level = max(pixel)
 
-    # Gradient string for brightness levels
-    gradient = "@%#*+=-:. "
-    gradient = "█▓▒@$%&#ØØ¤¤◎oø*=+–•~¨°^`˝’’‘`·˙∘⠁⠀"
-    gradient = "@&%QWNM0gB#$DR8mHXKAUbGOpV4d9h6PkqwS2]ayjxY5Zoen[ult13IfcFi|)7JvTLs?z/*cr!+><;=^,_:*'-.`"
-    #gradient = "█▓▒▒ "
+    gradList = list(pGradient)
+    if gradientFilter != "":
+        gradList = [i for i in gradList if i in gradientFilter]
+    pGradient = ''.join(gradList)
+
+    for i in gradientFilter:
+        if i not in pGradient:
+            print(f"Element {i} not in gradient")
 
     if level < blackThreshold:
         max_brightness = blackThreshold
-        gradient = gradient[:-1]
-        gradient = gradient[::-1]
+        pGradient = pGradient[::-1]
+        pGradient = pGradient[:-1]
 
     # Calculate percentage and clamp it to [0, 1]
     percentage = max(0, min(level / max_brightness, 1))
-    index = int(percentage * (len(gradient) - 1))
+    index = int(percentage * (len(pGradient) - 1))
 
-    return gradient[index]
+    return pGradient[index]
 
 def filterSobel(image, width, height, axis):
     kernelX = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]] if axis == 1 else [[-1, -2, -1], [0, 0, 0], [1, 2, 1]]
@@ -117,6 +121,7 @@ def filterSobel(image, width, height, axis):
             gradient[y][x] = value
     return gradient
 
+@timing
 def getEdgeDirection(image) -> Image.Image:
     width, height = image.size
     imageData = image.load()
@@ -160,26 +165,35 @@ def downsampleGrayscale(pImage: Image.Image, levels: int = 1):
             dsImage.putpixel((x, y), avg)
     return dsImage
 
-
-def printDebugLevels(pImage):
-    values: list = []
+def printDebugLevels(pImage, colorTable):
+    values: dict = {}
     for x in range(pImage.width):
         for y in range(pImage.height):
-            if pImage.getpixel((x,y)) not in values:
-                values.append(pImage.getpixel((x,y)))
+            pixel = pImage.getpixel((x, y))
+            if pixel in values:
+                values[pixel] += 1
+            else:
+                values[pixel] = 1
     
     max_brightness = 225*3   # Maximum possible brightness
     blackThreshold = 85 * 3  # Threshold for reversing the gradient
-    for pixel in values:
+    for pixel in values.keys():
         
         level = sum(pixel) / 3  # Average of RGB values for normalization
         percentage = max(0, min(level / max_brightness, 1))
         if level < blackThreshold:
             max_brightness = blackThreshold
-    
-        print("p:", pixel, "  ||  %:", round(percentage), "  ||  l:",round(level),"  ||  &:",round(level/max_brightness*100))
 
-def printIMageToconsole(
+        colorCode = "UNDEFINED"
+
+        for i in  colorTable["colors"]:
+            if tuple(i["rgb"]) == pixel:
+                colorCode = i["code"]
+                colorName = i["name"]
+        perc = round(values[pixel] / (pImage.width * pImage.height) * 100, 2)
+        print("p:", hf.lenformat(pixel,15), "  ||  %:", hf.lenformat(str(round(percentage*100, 2)), 5), "  ||  l:",hf.lenformat(str(round(level)), 3),"  ||  &:", hf.lenformat(str(round(level/max_brightness*100)),3),f"{colorCode}[#]\033[0;0m", hf.lenformat(colorName, 15), hf.lenformat(values[pixel],5), f"{perc}%")
+
+def printImageToconsole(
         image: Image.Image,
         brightness: Image.Image,
         colors,
@@ -187,6 +201,7 @@ def printIMageToconsole(
         outlineThreshold: int = 60,
         mode: str = "rgb",
         watermark: str = "@programmic",
+        pGrad: str = "Xx.",
         grad: str = "||\\--/||\\--/||"
     ):
     """
@@ -205,7 +220,7 @@ def printIMageToconsole(
     if outlines and outlines.size != image.size:
         raise ValueError(f"Image size {image.size} is unequal to outline size {outlines.size}")
 
-    def printoutline(x, y):
+    def printoutline(x, y, pGrad):
         """
         Prints the outline or the color pixel based on the outline threshold.
         """
@@ -215,11 +230,11 @@ def printIMageToconsole(
             if value >= outlineThreshold:
                 print(f"\033[97;0m{hueToChar(pixel, grad)}", end="", flush=True)
             else:
-                simpleout(x, y)
+                simpleout(x, y, pGrad)
         else:
-            simpleout(x, y)
+            simpleout(x, y, pGrad)
 
-    def simpleout(x, y):
+    def simpleout(x, y, pGrad):
         """
         Prints the color pixel with brightness.
         """
@@ -236,18 +251,19 @@ def printIMageToconsole(
             raise ValueError(f"could not find matching code for color {pixelRGB}")
     
         # Print the pixel with the corresponding color and brightness
-        print(f"{color_code}{giveCharacterByPixelBrightness(pixelBrightness)}", end="", flush=False)
+        print(f"{color_code}{giveCharacterByPixelBrightness(pixelBrightness, pGrad, gradientFilter="")}", end="", flush=False)
 
     for y in range(image.height):
         for x in range(image.width):
             if watermark and (y == image.height - 1) and (x >= image.width - len(watermark)):
                 print(watermark, end="")
                 break
-            printoutline(x, y)
+            printoutline(x, y, pGrad)
         print("\033[0m")  # Reset color after each line
     return
 
 
+@timing
 def adjustEdgeDetectionDetail(image: Image.Image, blur_radius: int = 2, contrast_factor: float = 0.75) -> Image.Image:
     """
     Adjusts the detail level of edge detection by applying a Gaussian blur and adjusting contrast.
@@ -266,6 +282,7 @@ def adjustEdgeDetectionDetail(image: Image.Image, blur_radius: int = 2, contrast
     
     return adjusted_image
 
+@timing
 def brightnessMask(imgColor: Image.Image, imgValue: Image.Image) -> Image.Image:
     maskedImage: Image.Image = Image.new("RGB", imgColor.size)
     maskedPixels = maskedImage.load()
@@ -305,44 +322,157 @@ def hueToChar(rgb, gradient_string):
 
 
 if __name__ == '__main__':
-    terminalSize = shutil.get_terminal_size()
+    # Load settings data from JSON
+    with open('settings.json', encoding='utf-8') as f:
+        settings = json.load(f)["settings"]
     
-    print("Image loading...",end="")
-    # Select a random image from the "images" directory
-    images_dir = os.path.join(os.path.dirname(__file__), "../images")
-    try:
-        imgPath = os.path.join(images_dir, random.choice(os.listdir(images_dir)))
-    except:
-        print("\033[31mNo Image in folder\033[0;0m")
-    image = Image.open(imgPath)
-    print("done")
 
-    print("Color table loading...",end="")
+    print("\033c")
+    for i in settings:
+        print(hf.lenformat(i,25), settings[i])
+
+    print()
+    print(str(settings["load"]))
+    print(list(settings["loadTypes"]))
+    
+
+    if settings["load"] not in settings["loadTypes"]:
+        print(f"Error: {settings["load"]} not in {settings["loadTypes"]}")
+        exit(1)
+    
+    if settings["gradientType"] not in settings["gradientTypes"]:
+        print(f"Error: {settings["gradientType"]} not in {settings["gradientTypes"]}")
+        exit(1)
+    
+    s_drawOutline = settings["outline"]
+    s_gradient = settings["gradients"]["minimalist"]
+    s_outlineStrength = settings["outlineStrength"]
+    s_outlineBlurRadius = settings["outlineBlurRadius"]
+    s_outlineContrastFactor = settings["outlineContrastFactor"]
+    s_watermark = settings["watermark"]
+
+
+
+
+    images_dir = os.path.join(os.path.dirname(__file__), "../images")
+    images = [f for f in os.listdir(images_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'))]
+    if not images:
+        print("\033[31mNo images found in the folder\033[0;0m")
+        exit(1)
+
+    if settings["load"] == "select":
+        for i in range(len(images)):
+            print(hf.lenformat(i, 2, " ", "front") + ". " + images[i])
+        validInput = False
+        while not validInput:
+            selImage = input(f"Select image... ( Input Number between 0 and {len(images)-1} ):  ")
+            if selImage.isnumeric():
+                if  0 <= int(selImage) <= len(images)-1:
+                    validInput = True
+                    break
+            print(f"[ {selImage} ] is not a acceptable input. Please input a Integer between 0 and {len(images)-1}.  ")
+        imgPath = os.path.join(images_dir, images[int(selImage)])
+    elif settings["load"] == "random":
+        imgPath = os.path.join(images_dir, random.choice(images))
+    else:
+        print("Unsupported image selection mode... Exiting")
+        exit(1)
+    image = Image.open(imgPath)
+    
+
+    if settings["setSettingsInTerminal"]:
+
+        validInput = False
+        while not validInput:
+            sel = input("Please select wether or not to draw a outline ( Y/N ):  ")
+            if sel.lower() == "y":
+                s_drawOutline = True
+                validInput = True
+            elif sel.lower() == "n":
+                s_drawOutline = False
+                validInput = True
+            else:
+                print(f"[ {selImage} ] is not a acceptable input. Draw outline? ( Y/N ):  ")
+
+        validInput = False
+        while not validInput:
+            for i in range(len(settings["gradientTypes"])):
+                print(hf.lenformat(i, 2, " ", "front") + ". " + settings["gradientTypes"][i])
+            sel = input(f"Please select shading gradiant ({0} - {len(settings["gradientTypes"])-1}):  ")
+            if sel.isnumeric():
+                if  0 <= int(sel) <= len(settings["gradientTypes"])-1:
+                    if settings["gradientTypes"][int(sel)] != "random":
+                        gradType = settings["gradientTypes"][int(sel)]
+                        s_gradient = settings["gradients"][gradType]
+                        print("Selected gradient:", s_gradient)
+                        validInput = True
+                    else:
+                        gradType = settings["gradientTypes"][random.randint(0, len(settings["gradients"])-1)]
+                        s_gradient = settings["gradients"][gradType]
+                        print("Selected gradient:", s_gradient)
+                        validInput = True
+
+        validInput = False
+        while not validInput:
+            sel = input("Please select wether or not to draw a watermark ( Y/N ):  ")
+            if sel.lower() == "y":
+                validInput = True
+            elif sel.lower() == "n":
+                s_watermark = ""
+                validInput = True
+            else:
+                print(f"[ {selImage} ] is not a acceptable input. Draw watermark? ( Y/N ):  ")
+                validInput = True
+    
+        if s_watermark != "":
+            s_watermark = input("Please input watermark:  ( <any> )  ")
+
+
+
     # Load colors from colors.json
     with open('colors.json', 'r') as file:
         colorsJSON = json.load(file)
         colorsRGB = colorsToRGBList(colorsJSON)  # Convert to a list of RGB tuples
         for color in colorsJSON["colors"]:
             color["code"] = color["code"].encode().decode("unicode_escape")
-    print("done")
-    
-    grayscaleImage = image.convert("L")
-    edgeDetect = adjustEdgeDetectionDetail(grayscaleImage, 1, 5).filter(ImageFilter.FIND_EDGES)
-    edgeDirections = getEdgeDirection(edgeDetect)
-    edgeDirectionMask = brightnessMask(edgeDirections, edgeDetect)
 
+
+    terminalSize = shutil.get_terminal_size()
+    
+    print("\n\n")
+    
     # Calculate the new dimensions for resizing
     max_width = terminalSize.columns
     max_height = terminalSize.lines - 4
     new_width, new_height = resizeImage(image, max_width, max_height).size
 
+    if s_drawOutline:
+        print("Processing Edge Data...",end="")
+        grayscaleImage = image.convert("L")
+        edgeDetect = adjustEdgeDetectionDetail(grayscaleImage, s_outlineBlurRadius, s_outlineContrastFactor).filter(ImageFilter.FIND_EDGES)
+        edgeDirections = getEdgeDirection(edgeDetect)
+        edgeDirectionMask = brightnessMask(edgeDirections, edgeDetect)
+        printOutline = edgeDirectionMask.resize((new_width, new_height))
+
+
 
     # Resize both the color image and the outline image to the same dimensions
     colorImage = posterizeImage(image.resize((new_width, new_height)), colorsJSON)
     brightnessImage = image.resize((new_width, new_height))
-    printOutline = edgeDirectionMask.resize((new_width, new_height))
+    
 
-    print("Images are same size:", (colorImage.size == printOutline.size), colorImage.size, printOutline.size)
-
-    printIMageToconsole(colorImage, brightnessImage, colorsJSON, printOutline, 20)
-    printDebugLevels(colorImage)
+    if s_drawOutline:
+        printImageToconsole(colorImage, 
+                            brightnessImage,
+                            colorsJSON,
+                            printOutline,
+                            s_outlineStrength,
+                            pGrad=s_gradient,
+                            watermark=s_watermark)
+    else:
+        printImageToconsole(colorImage,
+                            brightnessImage,
+                            colorsJSON,
+                            pGrad=s_gradient,
+                            watermark=s_watermark)
+    if settings["printDebugInformation"]: printDebugLevels(colorImage, colorsJSON)
