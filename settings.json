@@ -1,6 +1,6 @@
 {
     "settings": {
-        "setSettingsInTerminal": true,
+        "setSettingsInTerminal": false,
         "loadTypes": [
             "random",
             "select"
@@ -26,6 +26,8 @@
         "outlineContrastFactor": 5,
         "useGradientFilter": false,
         "watermark": "@programmic",
+        "exportImage": true,
+        "exportLocation": "\\exports\\",
         "printDebugInformation": false
     }
 }

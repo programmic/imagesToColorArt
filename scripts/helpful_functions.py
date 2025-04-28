@@ -502,4 +502,4 @@ def timeFormat( seconds: int | float ) -> str:
     seconds = int( seconds )
 
     # Format the output as dd:hh:mm:ss:msms
-    return f"{days:02}d {hours:02}h {minutes:02}m {seconds:02}s {milliseconds:03}ms"
+    return f"{days:02}d-{hours:02}h-{minutes:02}m-{seconds:02}s-{milliseconds:03}ms"

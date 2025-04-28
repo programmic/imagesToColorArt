@@ -1,6 +1,7 @@
-from PIL import Image, ImageFilter, ImageEnhance
+from PIL import Image, ImageFilter, ImageEnhance, ImageGrab
 import os, math, random, json, shutil, colorsys, time
 import helpful_functions as hf
+import pygetwindow as gw
 from tqdm import tqdm
 
 def timing(func):
@@ -350,6 +351,7 @@ if __name__ == '__main__':
     s_outlineBlurRadius = settings["outlineBlurRadius"]
     s_outlineContrastFactor = settings["outlineContrastFactor"]
     s_watermark = settings["watermark"]
+    s_exportImage = settings["exportImage"]
 
 
 
@@ -428,6 +430,18 @@ if __name__ == '__main__':
             s_watermark = input("Please input watermark:  ( <any> )  ")
 
 
+        validInput = False
+        while not validInput:
+            sel = input("Please select wether to export Image ( Y/N ):  ")
+            if sel.lower() == "y":
+                s_exportImage = True
+                validInput = True
+            elif sel.lower() == "n":
+                s_exportImage = False
+                validInput = True
+            else:
+                print(f"[ {selImage} ] is not a acceptable input. Export Image? ( Y/N ):  ")
+
 
     # Load colors from colors.json
     with open('colors.json', 'r') as file:
@@ -476,3 +490,24 @@ if __name__ == '__main__':
                             pGrad=s_gradient,
                             watermark=s_watermark)
     if settings["printDebugInformation"]: printDebugLevels(colorImage, colorsJSON)
+    if s_exportImage:
+        s_exportLocation = os.getcwd() + settings["exportLocation"]
+        print(s_exportLocation)
+        windows = gw.getAllTitles()
+        terminalStr = next((window for window in windows if "cmd.exe" in window), None)
+        if terminalStr == None:
+            print("No terminal found. Exiting...")
+            exit(1)
+        terminal: gw.Win32Window = gw.getWindowsWithTitle(terminalStr)[0]
+        terminalDimensions = (terminal.width, terminal.height)
+        terminalPosition = (terminal.topleft[0], terminal.topright[1])
+        print(terminalDimensions, terminalPosition)
+        time.sleep(1)
+        screenshot = ImageGrab.grab(bbox=(terminalPosition[0], terminalPosition[1], terminalPosition[0]+terminalDimensions[0], terminalPosition[1]+terminalDimensions[1]))
+        screenshot.show()
+        # Ensure the export directory exists
+        if not os.path.exists(os.path.dirname(s_exportLocation)):
+            os.makedirs(os.path.dirname(s_exportLocation))
+        exportPath: os.PathLike = s_exportLocation + str(hf.timeFormat(time.time())) + "_" + imgPath.split("\\")[-1].split(".")[0] + ".jpg"
+        print("Saving image as", exportPath)
+        screenshot.save(exportPath)
