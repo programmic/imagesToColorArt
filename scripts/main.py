@@ -3,6 +3,7 @@ import os, math, random, json, shutil, colorsys, time
 import helpful_functions as hf
 import pygetwindow as gw
 from tqdm import tqdm
+import numpy as np
 
 def timing(func):
     """
@@ -122,28 +123,85 @@ def filterSobel(image, width, height, axis):
             gradient[y][x] = value
     return gradient
 
+def filterSobel(image, width, height, axis):
+    if axis == 1:
+        kernel = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]
+    else:
+        kernel = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]]
+
+    imageData = [[image[x, y] if isinstance(image[x, y], int) else image[x, y][0] for x in range(width)] for y in range(height)]
+
+    gradient = [[0] * width for _ in range(height)]
+
+    for y in range(1, height - 1):
+        for x in range(1, width - 1):
+            value = (
+                imageData[y - 1][x - 1] * kernel[0][0] + imageData[y - 1][x] * kernel[0][1] + imageData[y - 1][x + 1] * kernel[0][2] +
+                imageData[y][x - 1] * kernel[1][0] + imageData[y][x] * kernel[1][1] + imageData[y][x + 1] * kernel[1][2] +
+                imageData[y + 1][x - 1] * kernel[2][0] + imageData[y + 1][x] * kernel[2][1] + imageData[y + 1][x + 1] * kernel[2][2]
+            )
+            gradient[y][x] = value
+
+    return gradient
+
+def filterSobelNew(image, width, height, axis):
+    if isinstance(image[0, 0], int):
+        img = np.array([[image[x, y] for x in range(width)] for y in range(height)], dtype=np.float32)
+    else:
+        img = np.array([[image[x, y][0] for x in range(width)] for y in range(height)], dtype=np.float32)
+
+    if axis == 1:
+        kernel = np.array([
+            [-1, 0, 1],
+            [-2, 0, 2],
+            [-1, 0, 1]
+        ], dtype=np.float32)
+    else:
+        kernel = np.array([
+            [-1, -2, -1],
+            [ 0,  0,  0],
+            [ 1,  2,  1]
+        ], dtype=np.float32)
+
+    gradient = np.zeros_like(img)
+
+    gradient[1:-1,1:-1] = (
+        img[0:-2,0:-2] * kernel[0,0] + img[0:-2,1:-1] * kernel[0,1] + img[0:-2,2:] * kernel[0,2] +
+        img[1:-1,0:-2] * kernel[1,0] + img[1:-1,1:-1] * kernel[1,1] + img[1:-1,2:] * kernel[1,2] +
+        img[2:,0:-2] * kernel[2,0] + img[2:,1:-1] * kernel[2,1] + img[2:,2:] * kernel[2,2]
+    )
+
+    return gradient.tolist()
+
 @timing
 def getEdgeDirection(image) -> Image.Image:
     width, height = image.size
     imageData = image.load()
-    dx = filterSobel(imageData, width, height, axis=1)  # Horizontaler Gradient
-    dy = filterSobel(imageData, width, height, axis=0)  # Vertikaler Gradient
-    direction = [[math.atan2(dy[y][x], dx[y][x]) for x in range(width)] for y in range(height)]
 
-    directionDeg = [[math.degrees(angle) for angle in row] for row in direction]
-    directionDeg = [[(angle + 360) % 360 for angle in row] for row in directionDeg]
-    directionNormalized = [[(angle / 360) for angle in row] for row in directionDeg]
-    
-    output = Image.new("RGB", (width, height))
-    pixels = []
+    dx = filterSobelNew(imageData, width, height, axis=1)
+    dy = filterSobelNew(imageData, width, height, axis=0)
 
-    for row in directionNormalized:
-        for value in row:
-            pixels.append(tuple(int(c * 255) for c in colorsys.hsv_to_rgb(value, 1.0, 1.0)))
+    dx = np.array(dx)
+    dy = np.array(dy)
 
-    print("\033[0;0mColoring Normals...")
+    direction = np.arctan2(dy, dx)
 
-    output.putdata(pixels)
+    directionDeg = np.degrees(direction)
+    directionDeg = (directionDeg + 360) % 360
+    directionNormalized = directionDeg / 360
+
+    hsv = np.stack((directionNormalized, np.ones_like(directionNormalized), np.ones_like(directionNormalized)), axis=-1)
+    hsv_flat = hsv.reshape(-1, 3)
+
+    rgb_flat = []
+    for h in tqdm(hsv_flat, desc="Converting HSV to RGB", ascii=True):
+        rgb_flat.append(colorsys.hsv_to_rgb(*h))
+    rgb_flat = np.array(rgb_flat)
+
+    rgb = (rgb_flat * 255).astype(np.uint8).reshape((height, width, 3))
+
+    output = Image.fromarray(rgb, mode='RGB')
+
     return output
 
 def downsampleGrayscale(pImage: Image.Image, levels: int = 1):
@@ -298,6 +356,16 @@ def brightnessMask(imgColor: Image.Image, imgValue: Image.Image) -> Image.Image:
             maskedPixels[x, y] = (int(r), int(g), int(b))
     return maskedImage
 
+@timing
+def brightnessMaskNew(imgColor: Image.Image, imgValue: Image.Image) -> Image.Image:
+    color_array = np.array(imgColor, dtype=np.float32)
+    value_array = np.array(imgValue.convert('L'), dtype=np.float32)
+    value_array = value_array[:, :, np.newaxis]
+    masked_array = color_array * (value_array / 255.0)
+    masked_array = masked_array.clip(0, 255).astype(np.uint8)
+    maskedImage = Image.fromarray(masked_array, mode="RGB")
+
+    return maskedImage
 
 def hueToChar(rgb, gradient_string):
     """
@@ -387,14 +455,14 @@ if __name__ == '__main__':
         validInput = False
         while not validInput:
             sel = input("Please select wether or not to draw a outline ( Y/N ):  ")
-            if sel.lower() == "y":
+            if sel.lower() == "y" or sel == "1" or sel == "1":
                 s_drawOutline = True
                 validInput = True
-            elif sel.lower() == "n":
+            elif sel.lower() == "n" or sel == "0":
                 s_drawOutline = False
                 validInput = True
             else:
-                print(f"[ {selImage} ] is not a acceptable input. Draw outline? ( Y/N ):  ")
+                print(f"[ {sel} ] is not a acceptable input. Draw outline? ( Y/N ):  ")
 
         validInput = False
         while not validInput:
@@ -403,44 +471,43 @@ if __name__ == '__main__':
             sel = input(f"Please select shading gradiant ({0} - {len(settings["gradientTypes"])-1}):  ")
             if sel.isnumeric():
                 if  0 <= int(sel) <= len(settings["gradientTypes"])-1:
+                    validInput = True
                     if settings["gradientTypes"][int(sel)] != "random":
                         gradType = settings["gradientTypes"][int(sel)]
-                        s_gradient = settings["gradients"][gradType]
-                        print("Selected gradient:", s_gradient)
-                        validInput = True
                     else:
                         gradType = settings["gradientTypes"][random.randint(0, len(settings["gradients"])-1)]
-                        s_gradient = settings["gradients"][gradType]
-                        print("Selected gradient:", s_gradient)
-                        validInput = True
+                    s_gradient = settings["gradients"][gradType]
+                    print("Selected gradient:", s_gradient)
 
         validInput = False
         while not validInput:
-            sel = input("Please select wether or not to draw a watermark ( Y/N ):  ")
-            if sel.lower() == "y":
+            sel = input("Please select wether or not to draw a watermark ( Y/N/C ):  ")
+            if sel.lower() == "y" or sel == "1":
+                s_watermark = settings["watermark"]
                 validInput = True
-            elif sel.lower() == "n":
+            elif sel.lower() == "n" or sel == "0":
                 s_watermark = ""
                 validInput = True
+            elif sel.lower == "c":
+                s_watermark = input("Please input watermark:  ( <any> )  ")
+                validInput
             else:
-                print(f"[ {selImage} ] is not a acceptable input. Draw watermark? ( Y/N ):  ")
+                print(f"[ {sel} ] is not a acceptable input. Draw watermark? Enter 'C' to enter custom watermark ( Y/N/C ):  ")
                 validInput = True
     
-        if s_watermark != "":
-            s_watermark = input("Please input watermark:  ( <any> )  ")
-
+            
 
         validInput = False
         while not validInput:
             sel = input("Please select wether to export Image ( Y/N ):  ")
-            if sel.lower() == "y":
+            if sel.lower() == "y" or sel == "1":
                 s_exportImage = True
                 validInput = True
-            elif sel.lower() == "n":
+            elif sel.lower() == "n" or sel == "0":
                 s_exportImage = False
                 validInput = True
             else:
-                print(f"[ {selImage} ] is not a acceptable input. Export Image? ( Y/N ):  ")
+                print(f"[ {sel} ] is not a acceptable input. Export Image? ( Y/N ):  ")
 
 
     # Load colors from colors.json
@@ -465,7 +532,7 @@ if __name__ == '__main__':
         grayscaleImage = image.convert("L")
         edgeDetect = adjustEdgeDetectionDetail(grayscaleImage, s_outlineBlurRadius, s_outlineContrastFactor).filter(ImageFilter.FIND_EDGES)
         edgeDirections = getEdgeDirection(edgeDetect)
-        edgeDirectionMask = brightnessMask(edgeDirections, edgeDetect)
+        edgeDirectionMask = brightnessMaskNew(edgeDirections, edgeDetect)
         printOutline = edgeDirectionMask.resize((new_width, new_height))
 
 
@@ -489,14 +556,13 @@ if __name__ == '__main__':
                             colorsJSON,
                             pGrad=s_gradient,
                             watermark=s_watermark)
-    if settings["printDebugInformation"]: printDebugLevels(colorImage, colorsJSON)
     if s_exportImage:
         s_exportLocation = os.getcwd() + settings["exportLocation"]
         print(s_exportLocation)
         windows = gw.getAllTitles()
         terminalStr = next((window for window in windows if "cmd.exe" in window), None)
         if terminalStr == None:
-            print("No terminal found. Exiting...")
+            print("No terminal found. Perhaps programm is running in IDE-integrated terminal?\nExiting...")
             exit(1)
         terminal: gw.Win32Window = gw.getWindowsWithTitle(terminalStr)[0]
         terminalDimensions = (terminal.width, terminal.height)
@@ -504,10 +570,10 @@ if __name__ == '__main__':
         print(terminalDimensions, terminalPosition)
         time.sleep(1)
         screenshot = ImageGrab.grab(bbox=(terminalPosition[0], terminalPosition[1], terminalPosition[0]+terminalDimensions[0], terminalPosition[1]+terminalDimensions[1]))
-        screenshot.show()
         # Ensure the export directory exists
         if not os.path.exists(os.path.dirname(s_exportLocation)):
             os.makedirs(os.path.dirname(s_exportLocation))
         exportPath: os.PathLike = s_exportLocation + str(hf.timeFormat(time.time())) + "_" + imgPath.split("\\")[-1].split(".")[0] + ".jpg"
         print("Saving image as", exportPath)
         screenshot.save(exportPath)
+    if settings["printDebugInformation"]: printDebugLevels(colorImage, colorsJSON)

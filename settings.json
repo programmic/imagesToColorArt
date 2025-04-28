@@ -1,6 +1,6 @@
 {
     "settings": {
-        "setSettingsInTerminal": false,
+        "setSettingsInTerminal": true,
         "loadTypes": [
             "random",
             "select"
@@ -9,7 +9,7 @@
         "gradients":{
                 "minimalist":   "@%#*+=-:. ",
                 "rounded":      "@$%&#ØØ¤¤◎oø*=+–•~¨°^`˝’’‘`·˙∘⠁⠀",
-                "full":         "@&%#8WNM0gBCEDRIJHXAUbGOpV4d9h6PkqwvS2]ayjxY5Zoen[ult13IfcFi|V)7JvTLSY?Zz/*crdpgh!+><;=^,_:*'~{}\"(`-. ",
+                "full":         "@&%#8WNM0gBCEDRIJHXAUbGOpV4d9h6PkqwvS2]ayjxY5Zoen[ult13IfcFiV)7JvTLSY?Zz*crdpgh!+><;=^,:*'~{}\"(`. ",
                 "blocky":       "█▓▒▒ "
             },
         "gradientTypes": [
