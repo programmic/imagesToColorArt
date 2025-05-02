@@ -250,7 +250,7 @@ def printDebugLevels(pImage, colorTable):
                 colorCode = i["code"]
                 colorName = i["name"]
         perc = round(values[pixel] / (pImage.width * pImage.height) * 100, 2)
-        print("p:", hf.lenformat(pixel,15), "  ||  %:", hf.lenformat(str(round(percentage*100, 2)), 5), "  ||  l:",hf.lenformat(str(round(level)), 3),"  ||  &:", hf.lenformat(str(round(level/max_brightness*100)),3),f"{colorCode}[#]\033[0;0m", hf.lenformat(colorName, 15), hf.lenformat(values[pixel],5), f"{perc}%")
+        print("rgb:", hf.lenformat(pixel,15), "  ||  %:", hf.lenformat(str(round(percentage*100, 2)), 5), "  ||  lvl:",hf.lenformat(str(round(level)), 3),"  ||  &:", hf.lenformat(str(round(level/max_brightness*100)),3),f"{colorCode}[#]\033[0;0m", hf.lenformat(colorName, 15), hf.lenformat(values[pixel],5), f"{perc}%")
 
 def printImageToconsole(
         image: Image.Image,
@@ -422,10 +422,10 @@ if __name__ == '__main__':
     s_exportImage = settings["exportImage"]
 
 
-
+    supportedImageFormats = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
 
     images_dir = os.path.join(os.path.dirname(__file__), "../images")
-    images = [f for f in os.listdir(images_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'))]
+    images = [f for f in os.listdir(images_dir) if f.lower().endswith(supportedImageFormats)]
     if not images:
         print("\033[31mNo images found in the folder\033[0;0m")
         exit(1)
@@ -439,9 +439,16 @@ if __name__ == '__main__':
             if selImage.isnumeric():
                 if  0 <= int(selImage) <= len(images)-1:
                     validInput = True
+                    imgPath = os.path.join(images_dir, images[int(selImage)])
+                    break
+            if selImage.strip('"').endswith(supportedImageFormats):
+                print("Input beeing supported File detected")
+                tmp = selImage.strip('"')
+                if os.path.isfile(selImage.strip('"')) and tmp.endswith(supportedImageFormats):
+                    validInput = True
+                    imgPath = selImage.strip('"')
                     break
             print(f"[ {selImage} ] is not a acceptable input. Please input a Integer between 0 and {len(images)-1}.  ")
-        imgPath = os.path.join(images_dir, images[int(selImage)])
     elif settings["load"] == "random":
         imgPath = os.path.join(images_dir, random.choice(images))
     else:
@@ -454,15 +461,15 @@ if __name__ == '__main__':
 
         validInput = False
         while not validInput:
-            sel = input("Please select wether or not to draw a outline ( Y/N ):  ")
-            if sel.lower() == "y" or sel == "1" or sel == "1":
+            sel = input("Please select wether or not to draw a outline ( Y/n ):  ")
+            if sel.lower() == "y" or sel == "1" or sel =="":
                 s_drawOutline = True
                 validInput = True
             elif sel.lower() == "n" or sel == "0":
                 s_drawOutline = False
                 validInput = True
             else:
-                print(f"[ {sel} ] is not a acceptable input. Draw outline? ( Y/N ):  ")
+                print(f"[ {sel} ] is not a acceptable input. Draw outline? ( Y/n ):  ")
 
         validInput = False
         while not validInput:
@@ -477,12 +484,12 @@ if __name__ == '__main__':
                     else:
                         gradType = settings["gradientTypes"][random.randint(0, len(settings["gradients"])-1)]
                     s_gradient = settings["gradients"][gradType]
-                    print("Selected gradient:", s_gradient)
+                    print("Selected gradient:", gradType, s_gradient)
 
         validInput = False
         while not validInput:
-            sel = input("Please select wether or not to draw a watermark ( Y/N/C ):  ")
-            if sel.lower() == "y" or sel == "1":
+            sel = input("Please select wether or not to draw a watermark ( Y/n/c ):  ")
+            if sel.lower() == "y" or sel == "1" or sel =="":
                 s_watermark = settings["watermark"]
                 validInput = True
             elif sel.lower() == "n" or sel == "0":
@@ -492,22 +499,22 @@ if __name__ == '__main__':
                 s_watermark = input("Please input watermark:  ( <any> )  ")
                 validInput
             else:
-                print(f"[ {sel} ] is not a acceptable input. Draw watermark? Enter 'C' to enter custom watermark ( Y/N/C ):  ")
+                print(f"[ {sel} ] is not a acceptable input. Draw watermark? Enter 'C' to enter custom watermark ( Y/n/c ):  ")
                 validInput = True
     
             
 
         validInput = False
         while not validInput:
-            sel = input("Please select wether to export Image ( Y/N ):  ")
-            if sel.lower() == "y" or sel == "1":
+            sel = input("Please select wether to export Image ( Y/n ):  ")
+            if sel.lower() == "y" or sel == "1" or sel =="":
                 s_exportImage = True
                 validInput = True
             elif sel.lower() == "n" or sel == "0":
                 s_exportImage = False
                 validInput = True
             else:
-                print(f"[ {sel} ] is not a acceptable input. Export Image? ( Y/N ):  ")
+                print(f"[ {sel} ] is not a acceptable input. Export Image? ( Y/n ):  ")
 
 
     # Load colors from colors.json
@@ -567,13 +574,14 @@ if __name__ == '__main__':
         terminal: gw.Win32Window = gw.getWindowsWithTitle(terminalStr)[0]
         terminalDimensions = (terminal.width, terminal.height)
         terminalPosition = (terminal.topleft[0], terminal.topright[1])
-        print(terminalDimensions, terminalPosition)
         time.sleep(1)
         screenshot = ImageGrab.grab(bbox=(terminalPosition[0], terminalPosition[1], terminalPosition[0]+terminalDimensions[0], terminalPosition[1]+terminalDimensions[1]))
         # Ensure the export directory exists
         if not os.path.exists(os.path.dirname(s_exportLocation)):
             os.makedirs(os.path.dirname(s_exportLocation))
-        exportPath: os.PathLike = s_exportLocation + str(hf.timeFormat(time.time())) + "_" + imgPath.split("\\")[-1].split(".")[0] + ".jpg"
+        exportPath: os.PathLike = s_exportLocation + str(hf.timeFormat(time.time())) + "_" + gradType + "_" + imgPath.split("\\")[-1].split(".")[0] + ".jpg"
         print("Saving image as", exportPath)
         screenshot.save(exportPath)
+    else:
+        print("Used gradient mode:", gradType, s_gradient)
     if settings["printDebugInformation"]: printDebugLevels(colorImage, colorsJSON)
